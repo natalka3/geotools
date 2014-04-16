@@ -16,15 +16,25 @@
  */
 package org.geotools.wfs.v1_0;
 
+import java.util.Iterator;
+
 import javax.xml.namespace.QName;
 
 import net.opengis.wfs.InsertResultsType;
 import net.opengis.wfs.InsertedFeatureType;
 import net.opengis.wfs.WfsFactory;
 
+import org.eclipse.xsd.XSDElementDeclaration;
+import org.eclipse.xsd.XSDFactory;
+import org.geotools.filter.v1_0.capabilities.OGC;
 import org.geotools.xml.AbstractComplexEMFBinding;
 import org.geotools.xml.ElementInstance;
 import org.geotools.xml.Node;
+import org.geotools.xml.impl.ElementImpl;
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+
+import com.sun.org.apache.xerces.internal.dom.ElementNSImpl;
 
 
 /**
@@ -100,7 +110,24 @@ public class InsertResultTypeBinding extends AbstractComplexEMFBinding {
         
         return resultType;
     }
-    
-    
+        
+    @Override
+    public Element encode(Object object, Document document, Element value) throws Exception {
+        Element e = super.encode(object, document, value);
+        
+        InsertResultsType resultType = (InsertResultsType) object;
+        
+        Iterator it = resultType.getFeature().iterator();
+        while (it.hasNext()) {
+              Iterator fidit = ((InsertedFeatureType)it.next()).getFeatureId().iterator();
+              while (fidit.hasNext()) {
+                 Element node = document.createElementNS(OGC.NAMESPACE, "FeatureId");
+                 node.setAttribute("fid", fidit.next().toString());
+                 e.appendChild(node);
+              }
+        }
+        
+        return e;
+    }
 
 }

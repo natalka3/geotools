@@ -54,6 +54,9 @@ public final class WFS extends org.geotools.wfs.WFS {
     public static final QName InsertResultType = new QName("http://www.opengis.net/wfs",
             "InsertResultType");
 
+    public static final QName TransactionResultType = new QName("http://www.opengis.net/wfs",
+            "TransactionResultType");
+
     /** singleton instance */
     private static final WFS instance = new WFS();
 

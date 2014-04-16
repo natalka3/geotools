@@ -22,6 +22,7 @@ import org.geotools.wfs.bindings.InsertResultsTypeBinding;
 import org.geotools.wfs.bindings.LockFeatureResponseTypeBinding;
 import org.geotools.wfs.bindings.OperationsTypeBinding;
 import org.geotools.wfs.bindings.TransactionResponseTypeBinding;
+import org.geotools.wfs.bindings.TransactionResultsTypeBinding;
 import org.geotools.wfs.v1_0.QueryTypeBinding;
 
 /**
@@ -53,6 +54,8 @@ public class WFSConfiguration extends org.geotools.wfs.WFSConfiguration {
                 TransactionResponseTypeBinding.class);
         container.registerComponentImplementation(WFS.InsertResultsType,
                 InsertResultsTypeBinding.class);
+        container.registerComponentImplementation(WFS.TransactionResultsType,
+                TransactionResultsTypeBinding.class);
         container.registerComponentImplementation(WFS.LockFeatureResponseType,
                 LockFeatureResponseTypeBinding.class);
         container.registerComponentImplementation(WFS.OperationsType, OperationsTypeBinding.class);

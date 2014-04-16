@@ -142,8 +142,6 @@ public abstract class WFSConfiguration extends Configuration {
         container.registerComponentImplementation(WFS.PropertyType, PropertyTypeBinding.class);
         container.registerComponentImplementation(WFS.QueryType, QueryTypeBinding.class);
         container.registerComponentImplementation(WFS.ResultTypeType, ResultTypeTypeBinding.class);
-        container.registerComponentImplementation(WFS.TransactionResultsType,
-            TransactionResultsTypeBinding.class);
         container.registerComponentImplementation(WFS.TransactionSummaryType,
             TransactionSummaryTypeBinding.class);
         container.registerComponentImplementation(WFS.TransactionType, TransactionTypeBinding.class);

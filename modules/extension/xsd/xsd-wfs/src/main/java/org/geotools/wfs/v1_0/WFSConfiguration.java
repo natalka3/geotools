@@ -50,6 +50,8 @@ public class WFSConfiguration extends org.geotools.wfs.WFSConfiguration {
                 WFS_LockFeatureResponseTypeBinding.class);
         container.registerComponentImplementation(WFS.InsertResultType,
                 InsertResultTypeBinding.class);
+        container.registerComponentImplementation(WFS.TransactionResultType,
+                TransactionResultTypeBinding.class);
         container.registerComponentImplementation(WFS.OperationsType, OperationsTypeBinding.class);
     }
 }

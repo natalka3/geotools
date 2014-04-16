@@ -112,4 +112,16 @@ public class WFS_TransactionResponseTypeBinding extends AbstractComplexEMFBindin
     public Class getType() {
         return TransactionResponseType.class;
     }
+    
+    @Override
+    public Object getProperty(Object object, QName name) throws Exception{
+        if ( "InsertResult".equals(name.getLocalPart()) ){
+            return ((TransactionResponseType) object).getInsertResults();
+        }
+        if ( "TransactionResult".equals(name.getLocalPart()) ){
+            return ((TransactionResponseType) object).getTransactionResults();
+        }
+        
+        return super.getProperty(object, name);
+    }
 }
