@@ -163,7 +163,7 @@ class WFSContentFeatureStore extends ContentFeatureStore {
         final boolean autoCommit;
         WFSLocalTransactionState localState;
         if (Transaction.AUTO_COMMIT.equals(getTransaction())) {
-            localState = new WFSLocalTransactionState(getState());
+            localState = getState().getLocalTransactionState();
             autoCommit = true;
         } else {
             autoCommit = false;
@@ -229,7 +229,7 @@ class WFSContentFeatureStore extends ContentFeatureStore {
 
         if (Transaction.AUTO_COMMIT.equals(transaction)) {
             // we're in auto commit. Do a batch update and commit right away
-            WFSLocalTransactionState localState = new WFSLocalTransactionState(getState());
+            WFSLocalTransactionState localState = getState().getLocalTransactionState();
             WFSRemoteTransactionState committingState = new WFSRemoteTransactionState(
                     getDataStore());
             //TODO: revisit?
