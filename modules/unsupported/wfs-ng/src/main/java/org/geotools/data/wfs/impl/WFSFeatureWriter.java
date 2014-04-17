@@ -21,7 +21,6 @@ public class WFSFeatureWriter extends DiffContentFeatureWriter {
         if (autoCommit) {
             WFSContentDataStore dataStore = (WFSContentDataStore) store.getDataStore();
             autoCommitState = new WFSRemoteTransactionState(dataStore);
-            // TODO: revisit?
             autoCommitState.watch(localSate.getState());
         } else {
             autoCommitState = null;
