@@ -516,7 +516,7 @@ public class ImageMosaicJDBCReader extends AbstractGridCoverage2DReader {
     /**
      * @param width
      * @param height
-     * @param backgroundColor
+     * @param backGroundcolor
      * @param outputTransparentColor
      * @return BufferdImage filled with outputTransparentColor
      */
