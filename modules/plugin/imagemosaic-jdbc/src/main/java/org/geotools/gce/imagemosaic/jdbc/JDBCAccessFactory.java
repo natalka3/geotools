@@ -19,9 +19,11 @@ package org.geotools.gce.imagemosaic.jdbc;
 import java.lang.reflect.Constructor;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.logging.Logger;
 
 import org.geotools.gce.imagemosaic.jdbc.custom.JDBCAccessOracleGeoRaster;
 import org.geotools.gce.imagemosaic.jdbc.custom.JDBCAccessPGRaster;
+import org.geotools.util.logging.Logging;
 
 /**
  * Factory for JDBCAccess Objects.
@@ -34,7 +36,7 @@ import org.geotools.gce.imagemosaic.jdbc.custom.JDBCAccessPGRaster;
  * 
  */
 class JDBCAccessFactory {
-	static Map<String, JDBCAccess> JDBCAccessMap = new HashMap<String, JDBCAccess>();
+    static Map<String, JDBCAccess> JDBCAccessMap = new HashMap<String, JDBCAccess>();
 
 	/**
 	 * Factory method
@@ -45,14 +47,19 @@ class JDBCAccessFactory {
 	 * @throws Exception
 	 */
 	@SuppressWarnings("unchecked")
-    static synchronized JDBCAccess getJDBCAcess(Config config) throws Exception {
-		JDBCAccess jdbcAccess = JDBCAccessMap.get(config.getXmlUrl());
+    static synchronized JDBCAccess getJDBCAcess(Config config, boolean reloadConfig) throws Exception {
+        String configXmlUrl = config.getXmlUrl();
 
-		if (jdbcAccess != null) {
-			return jdbcAccess;
-		}
+        JDBCAccess jdbcAccess = JDBCAccessMap.get(configXmlUrl);
 
-		SpatialExtension type = config.getSpatialExtension();
+        /*
+        GEOT-4633
+        */
+        if (jdbcAccess != null && !reloadConfig) {
+            return jdbcAccess;
+        }
+
+        SpatialExtension type = config.getSpatialExtension();
 
 		if (type == null) {
 			throw new Exception("Property <spatialExtension> missing");

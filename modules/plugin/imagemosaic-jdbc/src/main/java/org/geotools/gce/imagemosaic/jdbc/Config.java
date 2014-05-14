@@ -16,23 +16,19 @@
  */
 package org.geotools.gce.imagemosaic.jdbc;
 
+import org.geotools.data.jdbc.datasource.DBCPDataSourceFactory;
+import org.geotools.data.jdbc.datasource.JNDIDataSourceFactory;
+import org.w3c.dom.*;
+import org.xml.sax.InputSource;
+
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import java.io.File;
 import java.io.InputStream;
 import java.net.URL;
 import java.util.HashMap;
 import java.util.Hashtable;
 import java.util.Map;
-
-import javax.xml.parsers.DocumentBuilder;
-import javax.xml.parsers.DocumentBuilderFactory;
-
-import org.geotools.data.jdbc.datasource.DBCPDataSourceFactory;
-import org.geotools.data.jdbc.datasource.JNDIDataSourceFactory;
-import org.w3c.dom.Document;
-import org.w3c.dom.Element;
-import org.w3c.dom.NamedNodeMap;
-import org.w3c.dom.Node;
-import org.w3c.dom.NodeList;
-import org.xml.sax.InputSource;
 
 /**
  * Class for holding the config info read from the xml config file
@@ -45,6 +41,11 @@ import org.xml.sax.InputSource;
  */
 public class Config {
     static private Map<String, Config> ConfigMap = new Hashtable<String, Config>(); // Hashtable
+
+    /*
+    GEOT-4633
+    */
+    static private Map<String, Long> configFilesLastUpdatedMap = new Hashtable<String, Long>();
 
     // is
     // synchronized
@@ -128,10 +129,23 @@ public class Config {
     protected Config() {
     }
 
+    /*
+    GEOT-4633: enable configuration reload/repost - i.e. if user deletes and recreates coverage store, we want to
+    pick up new configuration. Overloaded method readFrom to enable it to be called with 'reloadConfig' flag and retaining
+    previous functionality unchanged when flag is set to false.
+    */
     public static Config readFrom(URL xmlURL) throws Exception {
+        return readFrom(xmlURL, false);
+    }
+
+    public static Config readFrom(URL xmlURL, boolean reloadConfig) throws Exception {
+
         Config result = ConfigMap.get(xmlURL.toString());
 
-        if (result != null) {
+        /*
+        GEOT-4633
+        */
+        if (result != null  && !reloadConfig) {
             return result;
         }
 
@@ -168,7 +182,7 @@ public class Config {
         NamedNodeMap map = tmp.getAttributes();
         String s = map.getNamedItem("interpolation").getNodeValue();
         result.interpolation = new Integer(s);
-        
+
         result.ignoreAxisOrder=Boolean.FALSE;
         tmp = dom.getElementsByTagName("axisOrder").item(0);
         if (tmp!=null) {
@@ -185,13 +199,36 @@ public class Config {
         else if (SpatialExtension.CUSTOM.equals(result.spatialExtension)) {
             readForCustom(result, dom);
         }
-        else {    
+        else {
             readMapping(result, dom);
             result.initStatements();
-        }    
+        }
         ConfigMap.put(xmlURL.toString(), result);
+        /*
+        GEOT-4633
+        */
+        configFilesLastUpdatedMap.put(xmlURL.toString(), getFile(xmlURL).lastModified());
 
         return result;
+    }
+
+    /*
+    GEOT-4633
+    */
+    static boolean isConfigChanged(URL xmlURL) {
+        if (!(ConfigMap.containsKey(xmlURL.toString()) && configFilesLastUpdatedMap.containsKey(xmlURL.toString()))) {
+            return false;
+        }
+        long lastUpdated = configFilesLastUpdatedMap.get(xmlURL.toString());
+        File xmlFile = getFile(xmlURL);
+        if (xmlFile.lastModified() > (lastUpdated + 500)) {
+            return true;
+        }
+        return false;
+    }
+
+    private static File getFile(URL xmlURL) {
+        return new File(xmlURL.getFile());
     }
 
     static void readMapping(Config result, Document dom) {

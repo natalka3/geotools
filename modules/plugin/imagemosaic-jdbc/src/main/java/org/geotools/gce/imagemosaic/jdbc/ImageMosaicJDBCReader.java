@@ -16,25 +16,7 @@
  */
 package org.geotools.gce.imagemosaic.jdbc;
 
-import java.awt.Color;
-import java.awt.Graphics2D;
-import java.awt.Rectangle;
-import java.awt.geom.Rectangle2D;
-import java.awt.image.BufferedImage;
-import java.awt.image.RenderedImage;
-import java.io.IOException;
-import java.io.UnsupportedEncodingException;
-import java.net.MalformedURLException;
-import java.net.URL;
-import java.util.Date;
-import java.util.HashSet;
-import java.util.Set;
-import java.util.logging.Level;
-import java.util.logging.Logger;
-
-import javax.imageio.ImageReadParam;
-import javax.media.jai.RenderedImageAdapter;
-
+import com.vividsolutions.jts.geom.Envelope;
 import org.geotools.coverage.CoverageFactoryFinder;
 import org.geotools.coverage.grid.GridCoverage2D;
 import org.geotools.coverage.grid.GridEnvelope2D;
@@ -61,7 +43,20 @@ import org.opengis.referencing.operation.CoordinateOperationFactory;
 import org.opengis.referencing.operation.MathTransform;
 import org.opengis.referencing.operation.TransformException;
 
-import com.vividsolutions.jts.geom.Envelope;
+import javax.imageio.ImageReadParam;
+import javax.media.jai.RenderedImageAdapter;
+import java.awt.*;
+import java.awt.geom.Rectangle2D;
+import java.awt.image.BufferedImage;
+import java.io.IOException;
+import java.io.UnsupportedEncodingException;
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.util.Date;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * This reader is responsible for providing access to images and image pyramids stored in a JDBC
@@ -130,8 +125,14 @@ public class ImageMosaicJDBCReader extends AbstractGridCoverage2DReader {
             throw new MalformedURLException(source.toString());
         }
 
+        boolean reloadConfig;
         try {
-            config = Config.readFrom(url);
+            /*
+            GEOT-4633
+             */
+            reloadConfig = Config.isConfigChanged(url);
+            LOGGER.fine("reloadConfig = " + reloadConfig + " for file " + url);
+            config = Config.readFrom(url, reloadConfig);
         } catch (Exception e) {
             LOGGER.severe(e.getMessage());
             throw new IOException(e);
@@ -158,7 +159,11 @@ public class ImageMosaicJDBCReader extends AbstractGridCoverage2DReader {
         //
         // /////////////////////////////////////////////////////////////////////
         try {
-            jdbcAccess = JDBCAccessFactory.getJDBCAcess(config);
+           /*
+            GEOT-4633
+            */
+            jdbcAccess = JDBCAccessFactory.getJDBCAcess(config, reloadConfig);
+
         } catch (Exception e1) {
             LOGGER.severe(e1.getLocalizedMessage());
             throw new IOException(e1);

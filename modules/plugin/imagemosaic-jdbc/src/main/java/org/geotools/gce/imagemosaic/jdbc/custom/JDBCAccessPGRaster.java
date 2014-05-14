@@ -17,25 +17,11 @@
 
 package org.geotools.gce.imagemosaic.jdbc.custom;
 
-import java.awt.Rectangle;
-import java.awt.geom.Rectangle2D;
-import java.io.IOException;
-import java.sql.*;
-
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.SortedSet;
-import java.util.TreeSet;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.TimeUnit;
-import java.util.logging.Level;
-import java.util.logging.Logger;
-
+import com.vividsolutions.jts.geom.*;
+import com.vividsolutions.jts.geom.Polygon;
+import com.vividsolutions.jts.io.ParseException;
+import com.vividsolutions.jts.io.WKBReader;
+import com.vividsolutions.jts.io.WKBWriter;
 import org.geotools.coverage.grid.GridCoverageFactory;
 import org.geotools.gce.imagemosaic.jdbc.Config;
 import org.geotools.gce.imagemosaic.jdbc.ImageDecoderThread;
@@ -44,15 +30,19 @@ import org.geotools.gce.imagemosaic.jdbc.TileQueueElement;
 import org.geotools.geometry.GeneralEnvelope;
 import org.geotools.util.logging.Logging;
 
-import com.vividsolutions.jts.geom.Coordinate;
-import com.vividsolutions.jts.geom.Envelope;
-import com.vividsolutions.jts.geom.Geometry;
-import com.vividsolutions.jts.geom.GeometryFactory;
-import com.vividsolutions.jts.geom.LinearRing;
-import com.vividsolutions.jts.geom.Polygon;
-import com.vividsolutions.jts.io.ParseException;
-import com.vividsolutions.jts.io.WKBReader;
-import com.vividsolutions.jts.io.WKBWriter;
+import java.awt.*;
+import java.awt.geom.Rectangle2D;
+import java.io.IOException;
+import java.sql.*;
+import java.util.*;
+import java.util.Date;
+import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * This class is used for JDBC Access to the Postgis raster feature
@@ -163,7 +153,7 @@ public class JDBCAccessPGRaster extends JDBCAccessCustom {
      * @param requestEnvelope
      *            Geographic Envelope of request
      * 
-     * @param info
+     * @param levelInfo
      *            Pyramid Level
      * 
      * @param tileQueue
@@ -329,13 +319,11 @@ public class JDBCAccessPGRaster extends JDBCAccessCustom {
                 }
 
                 /*
-                Set noDataValue on imageLevelInfo based on what
+                Create empty image with correct number of bands -
+                Set noDataValue, numberOfBands and pixelType on imageLevelInfo based on what
                 is stored in raster band metadata.
-                Please note: alternatively this value could be loaded from mosaic config file,
-                we could add an optional element/attribute to specify this value.
                 */
-                Number noDataValue = getNoDataValue(imageLevelInfo.getTileTableName(), con);
-                imageLevelInfo.setNoDataValue(noDataValue);
+                setDefaultImageConfigDetails(imageLevelInfo, con);
 
                 getLevelInfos().add(imageLevelInfo);
 
@@ -363,27 +351,33 @@ public class JDBCAccessPGRaster extends JDBCAccessCustom {
     }
 
     /*
-     extract noDataValues for each overview from overview raster tables
+     Create empty image with correct number of bands -
+     extract noDataValues, numberOfBands and pixelType for each overview from overview raster tables and save
+     this information in ImageLevelInfo object
      */
-    private Number getNoDataValue(String coverageTableName, Connection con) throws SQLException {
+    private void setDefaultImageConfigDetails(ImageLevelInfo imageLevelInfo, Connection con) throws SQLException {
+        String coverageTableName = imageLevelInfo.getTileTableName();
         PreparedStatement s = null;
         ResultSet res = null;
 
         try {
-            String stmt = "select ST_BandNoDataValue(rast) from " + coverageTableName + " limit 1";
+            String stmt = "select ST_BandNoDataValue(rast), ST_NumBands(rast), ST_BandPixelType(rast) from " + coverageTableName + " limit 1";
             s = con.prepareStatement(stmt);
             res = s.executeQuery();
 
             if (res.next()) {
                 ResultSetMetaData resultMetadata = res.getMetaData();
                 String colType = resultMetadata.getColumnTypeName(1);
+                Number noDataValue;
                 if (colType != null && colType.toLowerCase().startsWith("float")) {
-                    return res.getFloat(1);
+                    noDataValue = res.getFloat(1);
                 } else {
-                    return res.getInt(1);
+                    noDataValue = res.getInt(1);
                 }
+                imageLevelInfo.setNoDataValue(noDataValue);
+                imageLevelInfo.setNumberOfBands(res.getInt(2));
+                imageLevelInfo.setPixelType(res.getString(3));
             }
-            return null;
         }  finally {
             if (res != null) {
                 res.close();

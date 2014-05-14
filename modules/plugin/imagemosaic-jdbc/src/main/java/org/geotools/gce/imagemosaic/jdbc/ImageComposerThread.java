@@ -16,10 +16,15 @@
  */
 package org.geotools.gce.imagemosaic.jdbc;
 
-import java.awt.Color;
-import java.awt.Dimension;
-import java.awt.Graphics2D;
-import java.awt.Rectangle;
+import org.geotools.coverage.grid.GridCoverage2D;
+import org.geotools.coverage.grid.GridCoverageFactory;
+import org.geotools.geometry.GeneralEnvelope;
+import org.geotools.resources.image.ImageUtilities;
+import org.geotools.util.logging.Logging;
+
+import javax.media.jai.RasterFactory;
+import java.awt.*;
+import java.awt.color.ColorSpace;
 import java.awt.geom.Rectangle2D;
 import java.awt.image.*;
 import java.util.Arrays;
@@ -27,12 +32,6 @@ import java.util.Hashtable;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-
-import org.geotools.coverage.grid.GridCoverage2D;
-import org.geotools.coverage.grid.GridCoverageFactory;
-import org.geotools.geometry.GeneralEnvelope;
-import org.geotools.resources.image.ImageUtilities;
-import org.geotools.util.logging.Logging;
 
 /**
  * This class reads decoded tiles from the queue and performs the mosaicing and
@@ -88,17 +87,27 @@ public class ImageComposerThread extends AbstractThread {
 		    }
 		}
 
-		SampleModel sm = copyFrom.getSampleModel().createCompatibleSampleModel((int)dim.getWidth(), (int) dim.getHeight());
-        WritableRaster raster = Raster.createWritableRaster(sm, null);
+		SampleModel sm = copyFrom.getSampleModel().createCompatibleSampleModel((int) dim.getWidth(), (int) dim.getHeight());
 
         ColorModel colorModel = copyFrom.getColorModel();
         boolean alphaPremultiplied = copyFrom.isAlphaPremultiplied();
 
-        
+        /*
+         Create empty image with correct number of bands - extracted existing code into a method createImage
+         */
+        return createImage(sm, colorModel, alphaPremultiplied, properties);
+	}
+
+    /*
+     Create empty image with correct number of bands - extracted existing code into a method createImage
+    */
+    private BufferedImage createImage(SampleModel sm, ColorModel colorModel, boolean alphaPremultiplied, Hashtable<String, Object> properties) {
+        WritableRaster raster = Raster.createWritableRaster(sm, null);
+
         DataBuffer dataBuffer = createDataBufferFilledWithNoDataValues(raster, colorModel.getPixelSize());
         raster = Raster.createWritableRaster(sm, dataBuffer, null);
         BufferedImage image=  new BufferedImage(colorModel, raster, alphaPremultiplied, properties);
-        if (levelInfo.getNoDataValue()==null) {        
+        if (levelInfo.getNoDataValue()==null) {
             Graphics2D g2D = (Graphics2D) image.getGraphics();
             Color save = g2D.getColor();
             g2D.setColor(backgroundColor);
@@ -106,27 +115,52 @@ public class ImageComposerThread extends AbstractThread {
             g2D.setColor(save);
         }
         return  image;
-	}
+    }
+
+    private BufferedImage createDefaultImage(int imageType, Dimension dim) {
+        if (imageType == BufferedImage.TYPE_CUSTOM)
+            imageType = ImageMosaicJDBCReader.DEFAULT_IMAGE_TYPE;
+
+        LOGGER.fine("Creating default empty image for imageType: " + imageType);
+
+        BufferedImage image = new BufferedImage((int) dim.getWidth(), (int) dim
+                .getHeight(), imageType);
+
+        Graphics2D g2D = (Graphics2D) image.getGraphics();
+        Color save = g2D.getColor();
+        g2D.setColor(backgroundColor);
+        g2D.fillRect(0, 0, image.getWidth(), image.getHeight());
+        g2D.setColor(save);
+
+        return image;
+    }
 
     private BufferedImage getStartImage(int imageType) {
 		Dimension dim = getStartDimension();
 
-		if (imageType == BufferedImage.TYPE_CUSTOM)
-			imageType = ImageMosaicJDBCReader.DEFAULT_IMAGE_TYPE;
+        /*
+         Create empty image with correct number of bands - check is we have values for
+         numberOfBands, noDataValue and pixelType. If not - use old way of creating an
+         image based on imageType. Otherwise - reuse createImage method which calls
+         createDataBufferFilledWithNoDataValues method
+        */
+        if (levelInfo.getNumberOfBands() <= 0 || levelInfo.getNoDataValue() == null) {
+            return createDefaultImage(imageType, dim);
+        }
+        int dataType = resolveDataType(levelInfo.getPixelType());
+        if (dataType == -1) {
+            return createDefaultImage(imageType, dim);
+        }
 
-		BufferedImage image = new BufferedImage((int) dim.getWidth(), (int) dim
-				.getHeight(), imageType);
+        int numOfBands = levelInfo.getNumberOfBands();
+        LOGGER.fine("Creating empty image for numberOfBands: " + numOfBands + ", data type: " + dataType + ", noDataValue: " + levelInfo.getNoDataValue());
+        SampleModel sm = RasterFactory.createPixelInterleavedSampleModel(dataType, dim.width, dim.height, numOfBands);
+        ColorModel colorModel = new ComponentColorModel(ColorSpace.getInstance(ColorSpace.CS_GRAY), false, false, Transparency.OPAQUE, dataType);
 
-		Graphics2D g2D = (Graphics2D) image.getGraphics();
-		Color save = g2D.getColor();
-		g2D.setColor(backgroundColor);
-		g2D.fillRect(0, 0, image.getWidth(), image.getHeight());
-		g2D.setColor(save);
-
-		return image;
+        return createImage(sm, colorModel, false, new Hashtable<String, Object>());
 	}
 
-	@Override
+    @Override
 	public void run() {
 		BufferedImage image = null;
 
@@ -251,5 +285,47 @@ public class ImageComposerThread extends AbstractThread {
                         + " and " + pixelSize + " pixel size");
         }
         return dataBuffer;
+    }
+
+    /*
+     Create empty image with correct number of bands - resolve dataType based on pixelType.
+     Covered here pixelTypes listed at http://postgis.net/docs/RT_ST_BandPixelType.html
+     with an exception of '1BB'.
+     If received can't resolve dataType - then return '-1' so calling code will create
+      a default image (with 3 band raster)
+    */
+    private int resolveDataType(String pixelType) {
+        if (pixelType == null || pixelType.length() <= 0) {
+            return -1;
+        }
+
+        if ("2BUI".equalsIgnoreCase(pixelType)) {
+            return DataBuffer.TYPE_BYTE;
+        }
+        if ("4BUI".equalsIgnoreCase(pixelType)) {
+            return DataBuffer.TYPE_BYTE;
+        }
+        if ("8BSI".equalsIgnoreCase(pixelType)) {
+            return DataBuffer.TYPE_SHORT;
+        }
+        if ("8BUI".equalsIgnoreCase(pixelType)) {
+            return DataBuffer.TYPE_USHORT;
+        }
+        if ("16BSI".equalsIgnoreCase(pixelType)) {
+            return DataBuffer.TYPE_SHORT;
+        }
+        if ("16BUI".equalsIgnoreCase(pixelType)) {
+            return DataBuffer.TYPE_USHORT;
+        }
+        if ("32BSI".equalsIgnoreCase(pixelType)) {
+            return DataBuffer.TYPE_INT;
+        }
+        if ("32BUI".equalsIgnoreCase(pixelType)) {
+            return DataBuffer.TYPE_INT;
+        }
+        if ("32BF".equalsIgnoreCase(pixelType)) {
+            return DataBuffer.TYPE_FLOAT;
+        }
+        return -1;
     }
 }

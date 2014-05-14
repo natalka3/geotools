@@ -16,12 +16,11 @@
  */
 package org.geotools.gce.imagemosaic.jdbc;
 
-import java.io.ByteArrayOutputStream;
-import java.io.PrintWriter;
-
+import com.vividsolutions.jts.geom.Envelope;
 import org.opengis.referencing.crs.CoordinateReferenceSystem;
 
-import com.vividsolutions.jts.geom.Envelope;
+import java.io.ByteArrayOutputStream;
+import java.io.PrintWriter;
 
 /**
  * Java Bean for pyramid level information. For each pyramid and the original
@@ -116,6 +115,11 @@ public class ImageLevelInfo implements Comparable<ImageLevelInfo> {
 	private Envelope envelope = null;
 
 	private Number noDataValue;
+    /*
+     Create empty image with correct number of bands - record numberOfBands and pixelType
+    */
+    private int numberOfBands;
+    private String pixelType;
 
 	public String getCoverageName() {
 		return coverageName;
@@ -361,4 +365,23 @@ public class ImageLevelInfo implements Comparable<ImageLevelInfo> {
         public void setNoDataValue(Number noDataValue) {
             this.noDataValue = noDataValue;
         }
+
+    /*
+     Create empty image with correct number of bands - record numberOfBands and pixelType
+    */
+    public int getNumberOfBands() {
+        return numberOfBands;
+    }
+
+    public void setNumberOfBands(int numberOfBands) {
+        this.numberOfBands = numberOfBands;
+    }
+
+    public String getPixelType() {
+        return pixelType;
+    }
+
+    public void setPixelType(String pixelType) {
+        this.pixelType = pixelType;
+    }
 }
