@@ -124,28 +124,41 @@ public class ImageDecoderThread extends AbstractThread {
 			if (requestEnvelope.contains(tileEnvelope, true) == false) {
 				GeneralEnvelope savedTileEnvelope = new GeneralEnvelope(
 						tileEnvelope);
-				tileEnvelope.intersect(requestEnvelope);
+                tileEnvelope.intersect(requestEnvelope);
 
 				double scaleX = savedTileEnvelope.getSpan(0)
 						/ bufferedImage.getWidth();
 				double scaleY = savedTileEnvelope.getSpan(1)
 						/ bufferedImage.getHeight();
 				int x = (int) (Math
-						.round((tileEnvelope.getMinimum(0) - savedTileEnvelope
-								.getMinimum(0))
-								/ scaleX));
+						.floor((tileEnvelope.getMinimum(0) - savedTileEnvelope
+                                .getMinimum(0))
+                                / scaleX));
 				int y = (int) (Math
-						.round((savedTileEnvelope.getMaximum(1) - tileEnvelope
-								.getMaximum(1))
-								/ scaleY));
-				int width = (int) (Math.round(bufferedImage.getWidth()
-						/ savedTileEnvelope.getSpan(0)
-						* tileEnvelope.getSpan(0)));
-				int height = (int) (Math.round(bufferedImage.getHeight()
-						/ savedTileEnvelope.getSpan(1)
-						* tileEnvelope.getSpan(1)));
+						.floor((savedTileEnvelope.getMaximum(1) - tileEnvelope
+                                .getMaximum(1))
+                                / scaleY));
+
+                tileEnvelope.setEnvelope(
+                        x * scaleX + savedTileEnvelope.getMinimum(0),
+                        tileEnvelope.getMinimum(1),
+                        tileEnvelope.getMaximum(0),
+                        savedTileEnvelope.getMaximum(1) - y * scaleY);
+
+				int width = (int) (Math.ceil(bufferedImage.getWidth()
+                        / savedTileEnvelope.getSpan(0)
+                        * tileEnvelope.getSpan(0)));
+				int height = (int) (Math.ceil(bufferedImage.getHeight()
+                        / savedTileEnvelope.getSpan(1)
+                        * tileEnvelope.getSpan(1)));
+
 
 				if ((width > 0) && (height > 0)) {
+                    tileEnvelope.setEnvelope(
+                            tileEnvelope.getMinimum(0),
+                            (savedTileEnvelope.getMaximum(1) - y  * scaleY) - height * scaleY,
+                            (x + width) * scaleX + savedTileEnvelope.getMinimum(0),
+                            tileEnvelope.getMaximum(1));
 
 					BufferedImage clippedImage = bufferedImage.getSubimage(x,
 							y, width, height);

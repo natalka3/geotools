@@ -37,7 +37,7 @@ import org.geotools.geometry.GeneralEnvelope;
  * 
  */
 abstract class AbstractThread extends Thread {
-	LinkedBlockingQueue<TileQueueElement> tileQueue;
+    LinkedBlockingQueue<TileQueueElement> tileQueue;
 
 	Config config;
 
@@ -47,13 +47,13 @@ abstract class AbstractThread extends Thread {
 
 	ImageLevelInfo levelInfo;
 
-	double rescaleX;
+	float rescaleX;
 
-	double rescaleY;
+	float rescaleY;
 
-	double resX;
+	float resX;
 
-	double resY;
+	float resY;
 
 	/**
 	 * Constructor
@@ -80,26 +80,36 @@ abstract class AbstractThread extends Thread {
 		this.levelInfo = levelInfo;
 		this.pixelDimension = pixelDimenison;
 
-		resX = requestEnvelope.getSpan(0) / pixelDimenison.getWidth();
-		resY = requestEnvelope.getSpan(1) / pixelDimenison.getHeight();
-		rescaleX = levelInfo.getResX() / resX;
-		rescaleY = levelInfo.getResY() / resY;
-	}
+        resX = new Float(requestEnvelope.getSpan(0)).floatValue() / new Float(pixelDimenison.getWidth()).floatValue();
+        resY = new Float(requestEnvelope.getSpan(1)).floatValue() / new Float(pixelDimenison.getHeight()).floatValue();
+		rescaleX = new Float(levelInfo.getResX()).floatValue() / resX;
+		rescaleY = new Float(levelInfo.getResY()).floatValue() / resY;
+    }
 
 
     protected BufferedImage rescaleImageViaPlanarImage(BufferedImage image) {
+        float rescaleX1;
+        float rescaleY1;
+
+        double calcX = image.getWidth() * rescaleX;
+        double targetPixelX = Math.ceil(calcX);
+        rescaleX1 = new Float(targetPixelX / image.getWidth());
+
+        double calcY = image.getHeight() * rescaleY;
+        double targetPixelY = Math.ceil(calcY);
+        rescaleY1 = new Float(targetPixelY / image.getHeight());
+
         PlanarImage planarImage = new TiledImage(image, image.getWidth(), image.getHeight());
-        
-        int interpolation=Interpolation.INTERP_NEAREST;
-        
-        if (config.getInterpolation().intValue() == 2) 
-                   interpolation = Interpolation.INTERP_BILINEAR;
 
-        if (config.getInterpolation().intValue() == 3) 
-                   interpolation = Interpolation.INTERP_BICUBIC;
+        int interpolation= Interpolation.INTERP_NEAREST;
 
+        if (config.getInterpolation().intValue() == 2)
+            interpolation = Interpolation.INTERP_BILINEAR;
 
-        RenderedOp result = ScaleDescriptor.create(planarImage, new Float(rescaleX), new Float(rescaleY), 0.0f, 0.0f, Interpolation.getInstance(interpolation), null);
+        if (config.getInterpolation().intValue() == 3)
+            interpolation = Interpolation.INTERP_BICUBIC;
+
+        RenderedOp result = ScaleDescriptor.create(planarImage, rescaleX1, rescaleY1, 0.0f, 0.0f, Interpolation.getInstance(interpolation), null);
         WritableRaster scaledImageRaster = (WritableRaster) result.getData();
 
         ColorModel colorModel = image.getColorModel();

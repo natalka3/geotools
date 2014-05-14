@@ -22,16 +22,24 @@ import org.geotools.geometry.GeneralEnvelope;
 import org.geotools.resources.image.ImageUtilities;
 import org.geotools.util.logging.Logging;
 
-import javax.media.jai.RasterFactory;
+import javax.media.jai.*;
 import java.awt.*;
 import java.awt.color.ColorSpace;
 import java.awt.geom.Rectangle2D;
 import java.awt.image.*;
+import java.awt.image.DataBufferDouble;
+import java.awt.image.DataBufferFloat;
 import java.util.Arrays;
 import java.util.Hashtable;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+
+import javax.media.jai.RasterFactory;
+import javax.media.jai.operator.MosaicDescriptor;
+import javax.media.jai.operator.TranslateDescriptor;
+import java.util.*;
+import java.util.List;
 
 /**
  * This class reads decoded tiles from the queue and performs the mosaicing and
@@ -70,8 +78,9 @@ public class ImageComposerThread extends AbstractThread {
 		double width;
 		double height;
 
-		width = pixelDimension.getWidth() / rescaleX;
-		height = pixelDimension.getHeight() / rescaleY;
+        // TODO nat - creating start image with requested dimensions
+        width = pixelDimension.getWidth();
+        height = pixelDimension.getHeight();
 
 		return new Dimension((int) Math.round(width), (int) Math.round(height));
 	}
@@ -162,33 +171,45 @@ public class ImageComposerThread extends AbstractThread {
 
     @Override
 	public void run() {
-		BufferedImage image = null;
+        RenderedImage image = null;
 
-		TileQueueElement queueObject = null;
+        TileQueueElement queueObject;
 
-		try {
-			while ((queueObject = tileQueue.take()).isEndElement() == false) {
+        Dimension resultDimension = getStartDimension();
+        ImageLayout imageLayout = new ImageLayout(0, 0, (int) resultDimension.getWidth(), (int) resultDimension.getHeight());
+        RenderingHints renderingHints = new RenderingHints(JAI.KEY_IMAGE_LAYOUT, imageLayout);
+        List<RenderedOp> renderedOps = new ArrayList<RenderedOp>();
+        BufferedImage copyFrom = null;
 
-				if (image == null) {
-					image = getStartImage(queueObject.getTileImage());
-				}
+        try {
+            while ((queueObject = tileQueue.take()).isEndElement() == false) {
+                float posx = (float) Math.floor(new Float(queueObject.getEnvelope().getMinimum(0) - requestEnvelope.getMinimum(0)) / resX);
+                float posy = (float) Math.floor(new Float(requestEnvelope.getMaximum(1) - queueObject.getEnvelope().getMaximum(1)) / resY);
 
-				int posx = (int) ((queueObject.getEnvelope().getMinimum(0) - requestEnvelope
-						.getMinimum(0)) / levelInfo.getResX());
-				int posy = (int) ((requestEnvelope.getMaximum(1) - queueObject
-						.getEnvelope().getMaximum(1)) / levelInfo.getResY());
+                BufferedImage tileImage = queueObject.getTileImage();
 
-                image.getRaster().setRect(posx, posy, queueObject.getTileImage().getRaster());
+                BufferedImage scaledTileImage = rescaleImageViaPlanarImage(tileImage);
+                RenderedOp renderedOp = TranslateDescriptor.create(scaledTileImage, posx, posy, null, null);
+                renderedOps.add(renderedOp);
 
-			}
+                if (copyFrom == null) {
+                    copyFrom = scaledTileImage;
+                }
+            }
         } catch (InterruptedException e) {
-			throw new RuntimeException(e);
-		}
+            throw new RuntimeException(e);
+        }
 
-		if (image == null) // no tiles ??
-			image = getStartImage(ImageMosaicJDBCReader.DEFAULT_IMAGE_TYPE);
+        if (copyFrom != null) {
+            List<RenderedOp> renderedOpsWithEmptyImages = createEmptyTilesToCoverResultImage(resultDimension, copyFrom);
+            renderedOps.addAll(renderedOpsWithEmptyImages);
+            image = MosaicDescriptor.create(renderedOps.toArray(new RenderedOp[renderedOps.size()]), MosaicDescriptor.MOSAIC_TYPE_OVERLAY, null, null, null, null, renderingHints);
+        }
 
-		GeneralEnvelope resultEnvelope = null;
+        if (image == null) // no tiles ??
+            image = getStartImage(ImageMosaicJDBCReader.DEFAULT_IMAGE_TYPE);
+
+        GeneralEnvelope resultEnvelope = null;
 
 		if (xAxisSwitch) {
 			Rectangle2D tmp = new Rectangle2D.Double(requestEnvelope
@@ -201,19 +222,45 @@ public class ImageComposerThread extends AbstractThread {
 			resultEnvelope = requestEnvelope;
 		}
 
-	image = rescaleImageViaPlanarImage(image);
         if (outputTransparentColor == null)
-		    gridCoverage2D= coverageFactory.create(config.getCoverageName(),
-                            image, resultEnvelope);
-		else {
-                    if (LOGGER.isLoggable(Level.FINE))
-                            LOGGER.fine("Support for alpha on final mosaic");
-                    RenderedImage result =  ImageUtilities.maskColor(outputTransparentColor,image);
-                    gridCoverage2D = coverageFactory.create(config.getCoverageName(),
-                            result, resultEnvelope);
-		}
-	}
+            gridCoverage2D= coverageFactory.create(config.getCoverageName(),
+                    image, resultEnvelope);
+        else {
+            if (LOGGER.isLoggable(Level.FINE))
+                LOGGER.fine("Support for alpha on final mosaic");
+            RenderedImage result =  ImageUtilities.maskColor(outputTransparentColor,image);
+            gridCoverage2D = coverageFactory.create(config.getCoverageName(),
+                    result, resultEnvelope);
+        }
+    }
 
+    // TODO nat - since we are not creating a master startImage now, which would act as a background for areas with
+    // no db tiles, this method will create a series of empty images/tiles to cover entire result area so tiles
+    // we get from db can go over over the top of these
+    private List<RenderedOp> createEmptyTilesToCoverResultImage(Dimension resultDimension, RenderedImage copyFrom) {
+        int emptyTileSize = 512;
+        List<RenderedOp> renderedOps = new ArrayList<RenderedOp>();
+
+        int numOfHorizontalTiles = (int) Math.ceil(resultDimension.getWidth() / emptyTileSize);
+        int numOfVerticalTiles = (int) Math.ceil(resultDimension.getHeight() / emptyTileSize);
+
+        double defaultTileWidth = resultDimension.getWidth() / numOfHorizontalTiles;
+        double defaultTileHeight = resultDimension.getHeight() / numOfVerticalTiles;
+
+        for (int x = 0; x < numOfHorizontalTiles; x++) {
+            for (int y = 0; y < numOfVerticalTiles; y++) {
+                SampleModel sm = copyFrom.getSampleModel().createCompatibleSampleModel((int) Math.ceil(defaultTileWidth), (int) Math.ceil(defaultTileHeight));
+                BufferedImage emptyTile = createImage(sm, copyFrom.getColorModel(), copyFrom.getColorModel().isAlphaPremultiplied(), new Hashtable<String, Object>());
+
+                double posX = x * defaultTileWidth;
+                double posY = y * defaultTileHeight;
+
+                RenderedOp renderedOp = TranslateDescriptor.create(emptyTile, (float) posX, (float) posY, null, null);
+                renderedOps.add(renderedOp);
+            }
+        }
+        return renderedOps;
+    }
 
     GridCoverage2D getGridCoverage2D() {
 		return gridCoverage2D;
@@ -222,8 +269,8 @@ public class ImageComposerThread extends AbstractThread {
     private DataBuffer createDataBufferFilledWithNoDataValues(WritableRaster raster, int pixelSize) {
         int dataType = raster.getDataBuffer().getDataType();
         
-        Number noDataValue = levelInfo.getNoDataValue();        
-        
+        Number noDataValue = levelInfo.getNoDataValue();
+
         int dataBufferSize = raster.getDataBuffer().getSize();        
         int nrBanks = raster.getDataBuffer().getNumBanks();
         DataBuffer dataBuffer;
