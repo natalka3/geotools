@@ -221,33 +221,6 @@ public class ImageComposerThread extends AbstractThread {
         }
     }
 
-    // TODO nat - since we are not creating a master startImage now, which would act as a background for areas with
-    // no db tiles, this method will create a series of empty images/tiles to cover entire result area so tiles
-    // we get from db can go over over the top of these
-    private List<RenderedOp> createEmptyTilesToCoverResultImage(Dimension resultDimension, RenderedImage copyFrom) {
-        int emptyTileSize = 512;
-        List<RenderedOp> renderedOps = new ArrayList<RenderedOp>();
-
-        int numOfHorizontalTiles = (int) Math.ceil(resultDimension.getWidth() / emptyTileSize);
-        int numOfVerticalTiles = (int) Math.ceil(resultDimension.getHeight() / emptyTileSize);
-
-        double defaultTileWidth = resultDimension.getWidth() / numOfHorizontalTiles;
-        double defaultTileHeight = resultDimension.getHeight() / numOfVerticalTiles;
-
-        for (int x = 0; x < numOfHorizontalTiles; x++) {
-            for (int y = 0; y < numOfVerticalTiles; y++) {
-                SampleModel sm = copyFrom.getSampleModel().createCompatibleSampleModel((int) Math.ceil(defaultTileWidth), (int) Math.ceil(defaultTileHeight));
-                BufferedImage emptyTile = createImage(sm, copyFrom.getColorModel(), copyFrom.getColorModel().isAlphaPremultiplied(), new Hashtable<String, Object>());
-
-                double posX = x * defaultTileWidth;
-                double posY = y * defaultTileHeight;
-
-                RenderedOp renderedOp = TranslateDescriptor.create(emptyTile, (float) posX, (float) posY, null, null);
-                renderedOps.add(renderedOp);
-            }
-        }
-        return renderedOps;
-    }
 
     GridCoverage2D getGridCoverage2D() {
 		return gridCoverage2D;
