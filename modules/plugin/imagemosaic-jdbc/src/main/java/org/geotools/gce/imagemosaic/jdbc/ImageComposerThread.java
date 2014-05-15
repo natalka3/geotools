@@ -171,39 +171,26 @@ public class ImageComposerThread extends AbstractThread {
 
     @Override
 	public void run() {
-        RenderedImage image = null;
+        BufferedImage image = null;
 
         TileQueueElement queueObject;
 
-        Dimension resultDimension = getStartDimension();
-        ImageLayout imageLayout = new ImageLayout(0, 0, (int) resultDimension.getWidth(), (int) resultDimension.getHeight());
-        RenderingHints renderingHints = new RenderingHints(JAI.KEY_IMAGE_LAYOUT, imageLayout);
-        List<RenderedOp> renderedOps = new ArrayList<RenderedOp>();
-        BufferedImage copyFrom = null;
-
         try {
             while ((queueObject = tileQueue.take()).isEndElement() == false) {
+
+                if (image == null) {
+                    image = getStartImage(queueObject.getTileImage());
+                }
+
                 float posx = (float) Math.floor(new Float(queueObject.getEnvelope().getMinimum(0) - requestEnvelope.getMinimum(0)) / resX);
                 float posy = (float) Math.floor(new Float(requestEnvelope.getMaximum(1) - queueObject.getEnvelope().getMaximum(1)) / resY);
 
-                BufferedImage tileImage = queueObject.getTileImage();
+                BufferedImage rescaledTileImage = rescaleImageViaPlanarImage(queueObject.getTileImage());
 
-                BufferedImage scaledTileImage = rescaleImageViaPlanarImage(tileImage);
-                RenderedOp renderedOp = TranslateDescriptor.create(scaledTileImage, posx, posy, null, null);
-                renderedOps.add(renderedOp);
-
-                if (copyFrom == null) {
-                    copyFrom = scaledTileImage;
-                }
+                image.getRaster().setRect((int) posx, (int) posy, rescaledTileImage.getRaster());
             }
         } catch (InterruptedException e) {
             throw new RuntimeException(e);
-        }
-
-        if (copyFrom != null) {
-            List<RenderedOp> renderedOpsWithEmptyImages = createEmptyTilesToCoverResultImage(resultDimension, copyFrom);
-            renderedOps.addAll(renderedOpsWithEmptyImages);
-            image = MosaicDescriptor.create(renderedOps.toArray(new RenderedOp[renderedOps.size()]), MosaicDescriptor.MOSAIC_TYPE_OVERLAY, null, null, null, null, renderingHints);
         }
 
         if (image == null) // no tiles ??
