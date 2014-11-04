@@ -24,10 +24,10 @@
   <!--     Module Description                                      -->
   <!-- =========================================================== -->
   <groupId>org.geotools</groupId>
-  <artifactId>gt-render</artifactId>
+  <artifactId>gt-render-custom-minestar</artifactId>
   <packaging>jar</packaging>
   <name>Render</name>
-  
+  <version>11.0.1</version>
 
   <scm>
     <connection>
@@ -95,30 +95,30 @@
     <dependency>
       <groupId>org.geotools</groupId>
       <artifactId>gt-main</artifactId>
-      <version>${project.version}</version>
+      <version>${project.parent.version}</version>
     </dependency>
     <dependency>
       <groupId>org.geotools</groupId>
       <artifactId>gt-coverage</artifactId>
-      <version>${project.version}</version>
+      <version>${project.parent.version}</version>
     </dependency>
     <dependency>
       <groupId>org.geotools</groupId>
       <artifactId>gt-cql</artifactId>
-      <version>${project.version}</version>
+      <version>${project.parent.version}</version>
     </dependency>
     
     <!-- Test dependencies -->
     <dependency>
       <groupId>org.geotools</groupId>
       <artifactId>gt-epsg-hsql</artifactId>
-      <version>${project.version}</version>
+      <version>${project.parent.version}</version>
       <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.geotools</groupId>
       <artifactId>gt-sample-data</artifactId>
-      <version>${project.version}</version>
+      <version>${project.parent.version}</version>
       <scope>test</scope>
     </dependency>
     <dependency>
@@ -147,25 +147,25 @@
     <dependency>
       <groupId>org.geotools</groupId>
       <artifactId>gt-property</artifactId>
-      <version>${project.version}</version>
+      <version>${project.parent.version}</version>
       <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.geotools</groupId>
       <artifactId>gt-geotiff</artifactId>
-      <version>${project.version}</version>
+      <version>${project.parent.version}</version>
       <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.geotools.xsd</groupId>
       <artifactId>gt-xsd-sld</artifactId>
-      <version>${project.version}</version>
+      <version>${project.parent.version}</version>
       <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.geotools</groupId>
       <artifactId>gt-shapefile</artifactId>
-      <version>${project.version}</version>
+      <version>${project.parent.version}</version>
       <scope>test</scope>
     </dependency>
   </dependencies>
@@ -186,6 +186,28 @@
       </plugin>
     </plugins>
   </build>
-  
+  <repositories>
+    <repository>
+        <snapshots>
+            <enabled>false</enabled>
+        </snapshots>
+        <id>cat-libs-releases</id>
+        <name>libs-releases</name>
+        <url>http://minestarsvn.ap.cat.com:8081/artifactory/libs-releases</url>
+    </repository>
+    <repository>
+        <snapshots>
+            <enabled>true</enabled>
+        </snapshots>
+        <id>cat-libs-snapshots</id>
+        <name>libs-snapshots</name>
+        <url>http://minestarsvn.ap.cat.com:8081/artifactory/libs-snapshots</url>
+    </repository>
+    <repository>
+        <id>connectedworksite-maven-repo</id>
+        <name>connectedworksite-maven-repo-releases</name>
+        <url>http://minestarsvn.ap.cat.com:8081/artifactory/libs-releases-local</url>
+    </repository>
+  </repositories>
 
 </project>

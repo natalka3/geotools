@@ -24,6 +24,8 @@ import java.awt.image.RenderedImage;
 import java.awt.image.SampleModel;
 import java.math.BigInteger;
 import java.util.AbstractList;
+import java.util.HashMap;
+import java.util.Map;
 
 import org.geotools.geometry.GeneralDirectPosition;
 import org.geotools.referencing.operation.matrix.Matrix1;
@@ -89,6 +91,30 @@ public final class LinearColorMap extends AbstractList<LinearColorMapElement>
 		}
 	}
 
+    public final static class IndexColorMapParams {
+
+        public int max;
+        public int[] ARGB;
+        public BigInteger bits;
+        public int defaultColorIndex;
+
+        public IndexColorMapParams(
+                int max,
+                int[] ARGB,
+                BigInteger bits,
+                int defaultColorIndex
+        ) {
+            this.max = max;
+            this.ARGB = ARGB;
+            this.bits = bits;
+            this.defaultColorIndex = defaultColorIndex;
+        }
+
+        public IndexColorModel createColorModel() {
+            return new IndexColorModel(ColorUtilities.getBitCount(max), max, ARGB, 0, ColorUtilities.getTransferType(max), bits);
+        }
+    }
+
 	/**
      * @uml.property  name="colorModel"
      */
@@ -113,6 +139,8 @@ public final class LinearColorMap extends AbstractList<LinearColorMapElement>
 	private DefaultPiecewiseTransform1D<LinearColorMapElement> preFilteringPiecewise;
 
 	private Color preFilteringColor;
+
+    private static Map<String, IndexColorMapParams> cache = new HashMap<String, IndexColorMapParams>();
 
 	/**
      * @uml.property  name="name"
@@ -334,142 +362,171 @@ public final class LinearColorMap extends AbstractList<LinearColorMapElement>
 
 	private synchronized void initColorModel() {
 		if (colorModel == null) {
-			// /////////////////////////////////////////////////////////////////////
-			//
-			//  STEP 1
-			//
-			/////
-			// First of all let's create the palette for the standard values.
-			// Afterward we look for the right values for the default color and
-			// for the preserving values color if present since these could
-			// reuse the same colors used for the standard values.
-			//
-			// /////////////////////////////////////////////////////////////////////
 
-			// //
-			//
-			// Computes the number of entries required for the color
-			// palette.
-			// Note that in case the output range has non inclusive edges we
-			// have already taken that into account when building the outMax
-			// and outMin values hence we do not have to do that again.
-			//
-			// //
-			BigInteger bits = new BigInteger("0");		
-			final boolean preFilteringValuesPresent=preFilteringColor!=null;
-			int elementsCount = standardElements.length+(preFilteringValuesPresent?1:0);
-			int max=-1;
-			for (int i = 0; i < elementsCount; i++) {
-				final DefaultLinearPiecewiseTransform1DElement element = 
-					i<standardElements.length?
-							(DefaultLinearPiecewiseTransform1DElement) standardElements[i]:
-							preFilteringElements[0];
-				final int elementMin=(int) element.getOutputMinimum();
-				final int elementMax=(int) element.getOutputMaximum();
-				for (int k = elementMin; k <= elementMax; k++)
-					bits = bits.setBit(k);
-				max = (int) Math.max(max, elementMax);
-			}
-			//zero based indexing
-			max++;
-			
-			// /////////////////////////////////////////////////////////////////////
-			//
-			// Interpolate the colors in the color palette for standard values
-			//
-			// /////////////////////////////////////////////////////////////////////
-			int[] ARGB = new int[max];
-			int outMax=0,outMin=0;
-			for (int i = 0; i < elementsCount; i++) {
-				// I know that all the categories here are both
-				// ColorMapTransformElement and DefaultLinearPiecewiseTransform1DElement. The
-				// eventual NoDtaCategory as well.
-				final LinearColorMapElement element = i<standardElements.length? standardElements[i]:preFilteringElements[0];
-				// //
-				//
-				// Check if this category overlap with another one as far as
-				// the output value but with the same color. We already
-				// checked that they had the same color. If this happens we
-				// prevent the code from creating a new entry at the same
-				// place with the same color, no rocket science going on
-				// here!
-				//
-				// //
-				outMin = (int) element.getOutputMinimum();
-				outMax = (int) (element.getOutputMaximum());
-				//NOTE the second element is exclusive!!!
-				ColorUtilities.expand(element.getColors(), ARGB, outMin, outMax+1);
-			}
 
 			//create the prefiltering piecewise
 			this.preFilteringPiecewise=preFilteringElements==null?null:new DefaultPiecewiseTransform1D<LinearColorMapElement>(preFilteringElements);
-			
-			// /////////////////////////////////////////////////////////////////////
-			//
-			//  STEP 2
-			//
-			/////
-			// Now, if we do not have any default color we can proceed,
-			// otherwise we got some work to do. First of all, we need to check
-			// if the colors we are asked to use for the special cases are
-			// already in use. In such a case we don't reserve another index in
-			// the palette for them. Otherwise we have to add the new colors and
-			// recreate the ASRGB array.
-			//
-			// /////////////////////////////////////////////////////////////////////
-			final boolean lookForDefaultColor=defaultColor!=null;
-			boolean defaultColorFound=!lookForDefaultColor;
-			if(lookForDefaultColor){
-				
-				////
+
+			// Create the cache key
+
+            String key = standardElements[0].getRange().toString() + standardElements[standardElements.length - 1].getRange().toString();//  name.toString();//getName().toString();
+
+            // Lookup the cache to see if we have calculated this colormap already
+
+            IndexColorMapParams params = cache.get(key);
+
+            BigInteger bits = null;
+            int max=-1;
+            int[] ARGB = null;
+            int defaultColorIndex=-1;
+
+            // We have found the cache so extract the details
+            if (params != null) {
+                bits = params.bits;
+                max = params.max;
+                ARGB = params.ARGB;
+                defaultColorIndex = params.defaultColorIndex;
+            } else {
+
+                // /////////////////////////////////////////////////////////////////////
+                //
+                //  STEP 1
+                //
+                /////
+                // First of all let's create the palette for the standard values.
+                // Afterward we look for the right values for the default color and
+                // for the preserving values color if present since these could
+                // reuse the same colors used for the standard values.
+                //
+                // /////////////////////////////////////////////////////////////////////
+
+                // //
+                //
+                // Computes the number of entries required for the color
+                // palette.
+                // Note that in case the output range has non inclusive edges we
+                // have already taken that into account when building the outMax
+                // and outMin values hence we do not have to do that again.
+                //
+                // //
+                bits = new BigInteger("0");
+                final boolean preFilteringValuesPresent = preFilteringColor != null;
+                int elementsCount = standardElements.length + (preFilteringValuesPresent ? 1 : 0);
+                for (int i = 0; i < elementsCount; i++) {
+                    final DefaultLinearPiecewiseTransform1DElement element =
+                            i < standardElements.length ?
+                                    (DefaultLinearPiecewiseTransform1DElement) standardElements[i] :
+                                    preFilteringElements[0];
+                    final int elementMin = (int) element.getOutputMinimum();
+                    final int elementMax = (int) element.getOutputMaximum();
+                    for (int k = elementMin; k <= elementMax; k++)
+                        bits = bits.setBit(k);
+                    max = (int) Math.max(max, elementMax);
+                }
+                //zero based indexing
+                max++;
+
+                // /////////////////////////////////////////////////////////////////////
+                //
+                // Interpolate the colors in the color palette for standard values
+                //
+                // /////////////////////////////////////////////////////////////////////
+                ARGB = new int[max];
+                int outMax = 0, outMin = 0;
+                for (int i = 0; i < elementsCount; i++) {
+                    // I know that all the categories here are both
+                    // ColorMapTransformElement and DefaultLinearPiecewiseTransform1DElement. The
+                    // eventual NoDtaCategory as well.
+                    final LinearColorMapElement element = i < standardElements.length ? standardElements[i] : preFilteringElements[0];
+                    // //
+                    //
+                    // Check if this category overlap with another one as far as
+                    // the output value but with the same color. We already
+                    // checked that they had the same color. If this happens we
+                    // prevent the code from creating a new entry at the same
+                    // place with the same color, no rocket science going on
+                    // here!
+                    //
+                    // //
+                    outMin = (int) element.getOutputMinimum();
+                    outMax = (int) (element.getOutputMaximum());
+                    //NOTE the second element is exclusive!!!
+                    ColorUtilities.expand(element.getColors(), ARGB, outMin, outMax + 1);
+                }
+
+				// /////////////////////////////////////////////////////////////////////
 				//
-				// Search in the color map if we have the requested colors
+				//  STEP 2
 				//
-				////
-				int defaultColorIndex=-1;
-				for(int i=0;i<ARGB.length;i++)
-				{
-					if(lookForDefaultColor&&defaultColorIndex==-1&&bits.testBit(i)&&ARGB[i]==defaultColor.getRGB())
+				/////
+				// Now, if we do not have any default color we can proceed,
+				// otherwise we got some work to do. First of all, we need to check
+				// if the colors we are asked to use for the special cases are
+				// already in use. In such a case we don't reserve another index in
+				// the palette for them. Otherwise we have to add the new colors and
+				// recreate the ASRGB array.
+				//
+				// /////////////////////////////////////////////////////////////////////
+				final boolean lookForDefaultColor=defaultColor!=null;
+				boolean defaultColorFound=!lookForDefaultColor;
+				if(lookForDefaultColor){
+
+					////
+					//
+					// Search in the color map if we have the requested colors
+					//
+					////
+					for(int i=0;i<ARGB.length;i++)
 					{
-						defaultColorIndex=i;
-						defaultColorFound=true;
-						break;
-					}
-
-						
-				}
-				//now see what happened
-				if(defaultColorFound)
-					this.piecewise= new DefaultPiecewiseTransform1D<LinearColorMapElement>(this.standardElements,defaultColorIndex);
-				else
-				{
-					//check the bit vector for the first place available
-					int i=0;
-					for(;i<max;i++)
-						if(!bits.testBit(i))
+						if(lookForDefaultColor&&defaultColorIndex==-1&&bits.testBit(i)&&ARGB[i]==defaultColor.getRGB())
+						{
+							defaultColorIndex=i;
+							defaultColorFound=true;
 							break;
-					if(i==max){
-						max=i==max?max+1:max;
-						bits=bits.setBit(i);
-						final int[] tempARGB = new int[max];
-						System.arraycopy(ARGB, 0, tempARGB, 0, ARGB.length);
-						tempARGB[tempARGB.length-1]=defaultColor.getRGB();
-						ARGB=tempARGB;	
-					}
-					// SG we use max-1 as a default value since the colormap goes from 0 to max - 1
-					this.piecewise= new DefaultPiecewiseTransform1D<LinearColorMapElement>(this.standardElements,max-1);
-				}
+						}
 
-			}
-			else
-			{
+
+					}
+					//now see what happened
+					if(!defaultColorFound)
+					{
+						//check the bit vector for the first place available
+						int i=0;
+						for(;i<max;i++)
+							if(!bits.testBit(i))
+								break;
+						if(i==max){
+							max=i==max?max+1:max;
+							bits=bits.setBit(i);
+							final int[] tempARGB = new int[max];
+							System.arraycopy(ARGB, 0, tempARGB, 0, ARGB.length);
+							tempARGB[tempARGB.length-1]=defaultColor.getRGB();
+							ARGB=tempARGB;
+						}
+						// SG we use max-1 as a default value since the colormap goes from 0 to max - 1
+						defaultColorIndex = max-1;
+					}
+
+				}
+            } // else params == null
+
+            // Setup the piecewise transform
+            if (defaultColor!=null && defaultColorIndex != -1) {
+				this.piecewise= new DefaultPiecewiseTransform1D<LinearColorMapElement>(this.standardElements,defaultColorIndex);
+            } else {
 				this.piecewise= new DefaultPiecewiseTransform1D<LinearColorMapElement>(this.standardElements);
-			}
-			
-			colorModel = new IndexColorModel(ColorUtilities
-					.getBitCount(max), max, ARGB, 0, ColorUtilities
-					.getTransferType(max), bits);
-		}
+            }
+
+            if (params == null) {
+            	// Save the new parameters into the cache to use later
+                params = new IndexColorMapParams(max, ARGB, bits, defaultColorIndex);
+                cache.put(key, params);
+            }
+
+            // Use the param to create the color model
+			colorModel = params.createColorModel();
+
+		} // if colorModel == null
 		
 	}
 
