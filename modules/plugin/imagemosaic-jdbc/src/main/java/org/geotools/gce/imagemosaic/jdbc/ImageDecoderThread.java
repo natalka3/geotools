@@ -160,6 +160,16 @@ public class ImageDecoderThread extends AbstractThread {
                             (x + width) * scaleX + savedTileEnvelope.getMinimum(0),
                             tileEnvelope.getMaximum(1));
 
+                    // Adjust width and height so that the exception java.awt.image.RasterFormatException is not
+                    // thrown.
+                    if (x+width > bufferedImage.getWidth() + bufferedImage.getMinX()) {
+                        width -= x + width - bufferedImage.getWidth() - bufferedImage.getMinX() ;
+                    }
+
+                    if (y+height > bufferedImage.getHeight() + bufferedImage.getMinY()) {
+                        height -= y + height - bufferedImage.getHeight() - bufferedImage.getMinY() ;
+                    }
+
 					BufferedImage clippedImage = bufferedImage.getSubimage(x,
 							y, width, height);
 
